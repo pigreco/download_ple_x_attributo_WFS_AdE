@@ -1,32 +1,67 @@
 # -*- coding: utf-8 -*-
+"""
+/***************************************************************************
+ WMF Catasto Agenzia delle Entrate CC BY 4.0
+                              -------------------
+        copyright            : (C) 2025 by Totò Fiandaca
+        email                : pigrecoinfinito@gmail.com
+ ***************************************************************************/
+"""
 
 from qgis.PyQt.QtCore import QCoreApplication, QVariant
-from qgis.PyQt.QtWidgets import QMessageBox
-from qgis.core import (QgsProcessing, QgsFeatureSink, QgsProcessingException,
-                      QgsProcessingAlgorithm, QgsProcessingParameterString,
-                      QgsProcessingParameterBoolean, QgsProcessingParameterVectorLayer,
-                      QgsProcessingParameterFeatureSink, QgsFields, QgsField,
-                      QgsFeature, QgsGeometry, QgsWkbTypes, QgsPointXY,
-                      QgsProject, QgsVectorLayer, QgsFeatureRequest,
-                      QgsExpression, QgsExpressionContext, QgsCoordinateReferenceSystem,
-                      QgsProcessingLayerPostProcessorInterface, QgsCoordinateTransform)
+from qgis.core import (QgsProcessing,
+                      QgsFeatureSink,
+                      QgsProcessingException,
+                      QgsProcessingAlgorithm,
+                      QgsProcessingParameterString,
+                      QgsProcessingParameterFeatureSink,
+                      QgsProcessingParameterVectorLayer,
+                      QgsProcessingParameterCrs,
+                      QgsVectorLayer,
+                      QgsField,
+                      QgsFields,
+                      QgsFeature,
+                      QgsGeometry,
+                      QgsPointXY,
+                      QgsWkbTypes,
+                      QgsExpression,
+                      QgsExpressionContext,
+                      QgsCoordinateReferenceSystem,
+                      QgsFeatureRequest,
+                      QgsProject)
 from qgis.utils import iface
 import duckdb
-from datetime import datetime
+import urllib.request
+import json
 
-class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
-
-    INPUT_LAYER = 'INPUT_LAYER'
-    INPUT_COMUNE = 'INPUT_COMUNE'
-    INPUT_FOGLIO = 'INPUT_FOGLIO'
-    INPUT_PARTICELLA = 'INPUT_PARTICELLA'
-    OUTPUT = 'OUTPUT'
+class CatastaleSearchAlgorithm(QgsProcessingAlgorithm):
+    """
+    Algoritmo per la ricerca di particelle catastali tramite il servizio WFS
+    dell'Agenzia delle Entrate.
+    """
     
+    # Definizione delle costanti per i parametri
+    INPUT = 'INPUT'
+    OUTPUT = 'OUTPUT'
+    COMUNE = 'COMUNE'
+    FOGLIO = 'FOGLIO'
+    PARTICELLA = 'PARTICELLA'
+    CRS = 'CRS'
+    
+    def __init__(self):
+        super().__init__()
+        self.wfs_url = 'https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php'
+        self.parquet_index = 'https://raw.githubusercontent.com/ondata/dati_catastali/main/S_0000_ITALIA/anagrafica/index.parquet'
+        self.parquet_base = 'https://raw.githubusercontent.com/ondata/dati_catastali/main/S_0000_ITALIA/anagrafica/'
+
     def tr(self, string):
+        """
+        Returns a translatable string with the self.tr() function.
+        """
         return QCoreApplication.translate('Processing', string)
 
     def createInstance(self):
-        return DatiCatastaliAlgorithm()
+        return CatastaleSearchAlgorithm()
 
     def name(self):
         return 'ricercaparticelle'
@@ -41,7 +76,8 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         return 'catasto'
 
     def shortHelpString(self):
-        return self.tr("""Questo algoritmo recupera dati catastali tramite il servizio WFS dell'Agenzia delle Entrate.
+        return self.tr("""
+        Ricerca particelle catastali utilizzando il servizio WFS dell'Agenzia delle Entrate.
 
         <b>FUNZIONALITÀ</b>:
             - Ricerca particelle catastali per attributo (comune, foglio, particella)
@@ -65,320 +101,287 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         
         Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.""")
 
+    def check_internet_connection(self):
+        """
+        Verifica la connessione internet tentando di raggiungere un server noto
+        """
+        try:
+            urllib.request.urlopen('https://www.google.com', timeout=3)
+            return True
+        except:
+            return False
+
+    def validate_inputs(self, comune, foglio, particella):
+        """
+        Valida i parametri di input
+        """
+        if not comune or len(comune) != 4:
+            raise QgsProcessingException(
+                self.tr('Il codice comune deve essere di 4 caratteri')
+            )
+        
+        if not foglio.isdigit():
+            raise QgsProcessingException(
+                self.tr('Il foglio deve contenere solo numeri')
+            )
+            
+        if not particella or not particella.strip():
+            raise QgsProcessingException(
+                self.tr('La particella non può essere vuota')
+            )
+
     def initAlgorithm(self, config=None):
+        """
+        Inizializzazione dei parametri dell'algoritmo
+        """
         self.addParameter(
             QgsProcessingParameterVectorLayer(
-                self.INPUT_LAYER,
+                self.INPUT,
                 self.tr('Layer esistente (opzionale)'),
-                optional=True,
-                types=[QgsProcessing.TypeVectorPolygon]
+                [QgsProcessing.TypeVectorPolygon],
+                optional=True
             )
         )
         
         self.addParameter(
             QgsProcessingParameterString(
-                self.INPUT_COMUNE,
-                self.tr('Codice Comune o nome Comune'),
+                self.COMUNE,
+                self.tr('Codice comune'),
                 defaultValue='M011'
             )
         )
         
         self.addParameter(
             QgsProcessingParameterString(
-                self.INPUT_FOGLIO,
-                self.tr('Numero Foglio'),
+                self.FOGLIO,
+                self.tr('Foglio'),
                 defaultValue='0002'
             )
         )
         
         self.addParameter(
             QgsProcessingParameterString(
-                self.INPUT_PARTICELLA,
-                self.tr('Numero Particella'),
+                self.PARTICELLA,
+                self.tr('Particella'),
                 defaultValue='2'
+            )
+        )
+        
+        self.addParameter(
+            QgsProcessingParameterCrs(
+                self.CRS,
+                self.tr('Sistema di riferimento'),
+                defaultValue='EPSG:6706'
             )
         )
 
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.OUTPUT,
-                self.tr('Layer Particelle')
+                self.tr('Particelle trovate')
             )
         )
 
     def processAlgorithm(self, parameters, context, feedback):
-        # All'inizio del metodo, inizializza le variabili
-        self.last_geometry = None
-        self.last_layer_id = None
+        """
+        Esecuzione dell'algoritmo
+        """
+        # Verifica connessione internet
+        if not self.check_internet_connection():
+            raise QgsProcessingException(
+                self.tr('Connessione internet non disponibile')
+            )
 
-        # Input parameters
-        comune = self.parameterAsString(parameters, self.INPUT_COMUNE, context).strip().upper()
-        foglio = self.parameterAsString(parameters, self.INPUT_FOGLIO, context).strip().zfill(4)
-        particella = self.parameterAsString(parameters, self.INPUT_PARTICELLA, context).strip()
-        input_layer = self.parameterAsVectorLayer(parameters, self.INPUT_LAYER, context)
+        # Recupera i parametri
+        input_layer = self.parameterAsVectorLayer(parameters, self.INPUT, context)
+        comune = self.parameterAsString(parameters, self.COMUNE, context).strip().upper()
+        foglio = self.parameterAsString(parameters, self.FOGLIO, context).strip().zfill(4)
+        particella = self.parameterAsString(parameters, self.PARTICELLA, context).strip()
+        output_crs = self.parameterAsCrs(parameters, self.CRS, context)
 
-        if input_layer:
-            # Use existing layer
-            feedback.pushInfo(f'Aggiungendo dati al layer esistente: {input_layer.name()}')
-            
-            sink = input_layer.dataProvider()
-            dest_id = input_layer.id()
-            
-            # Assicuriamoci che il layer sia in modalità editing
-            input_layer.startEditing()
-        else:
-            # Create new layer with fields
-            feedback.pushInfo('Creando nuovo layer')
-            fields = QgsFields()
-            fields.append(QgsField('NATIONALCADASTRALREFERENCE', QVariant.String))
-            fields.append(QgsField('ADMIN', QVariant.String))
-            fields.append(QgsField('SEZIONE', QVariant.String))
-            fields.append(QgsField('FOGLIO', QVariant.String))
-            fields.append(QgsField('PARTICELLA', QVariant.String))
-            fields.append(QgsField('AREA', QVariant.Double))
-            
-            # Create output sink for new layer
-            (sink, dest_id) = self.parameterAsSink(
+        # Valida i parametri
+        self.validate_inputs(comune, foglio, particella)
+
+        # Prepara i campi
+        fields = QgsFields()
+        fields.append(QgsField('NATIONALCADASTRALREFERENCE', QVariant.String))
+        fields.append(QgsField('ADMIN', QVariant.String))
+        fields.append(QgsField('SEZIONE', QVariant.String))
+        fields.append(QgsField('FOGLIO', QVariant.String))
+        fields.append(QgsField('PARTICELLA', QVariant.String))
+        fields.append(QgsField('AREA', QVariant.Double))
+
+        # Gestione layer di output
+        if input_layer is None:
+            sink, dest_id = self.parameterAsSink(
                 parameters,
                 self.OUTPUT,
                 context,
                 fields,
                 QgsWkbTypes.MultiPolygon,
-                QgsCoordinateReferenceSystem('EPSG:6706')
+                output_crs
             )
-
-            if sink is None:
-                raise QgsProcessingException(self.tr('Errore nella creazione del layer di output'))
-
-        # Recupera il file parquet
-        try:
-            file_name = self.get_parquet_file(comune, feedback)
-            if not file_name:
-                return {self.OUTPUT: dest_id}
-        except Exception as e:
-            feedback.reportError(f"Errore nel recupero del file parquet: {str(e)}")
-            return {self.OUTPUT: dest_id}
-
-        # Recupera le coordinate
-        try:
-            coordinates = self.get_coordinates(comune, foglio, particella, file_name, feedback)
-            if not coordinates:
-                return {self.OUTPUT: dest_id}
-        except Exception as e:
-            feedback.reportError(f"Errore nel recupero delle coordinate: {str(e)}")
-            return {self.OUTPUT: dest_id}
-
-        # Recupera i dati WFS
-        try:
-            success, last_geometry = self.get_particella_wfs(coordinates[0], coordinates[1], sink, input_layer, feedback)
-            if not success:
-                feedback.reportError(self.tr('Errore nel recupero dei dati WFS'))
-            else:
-                if input_layer:
-                    input_layer.commitChanges()
             
-                # Salva l'ultima geometria e l'ID del layer per il post-processing
-                if last_geometry:
-                    self.last_geometry = last_geometry
-                    self.last_layer_id = dest_id
-                    feedback.pushInfo("Zoom programmato sull'ultima particella")
-                
-        except Exception as e:
-            feedback.reportError(f"Errore nel recupero dei dati WFS: {str(e)}")
-            if input_layer:
-                input_layer.rollBack()
+            if sink is None:
+                raise QgsProcessingException(self.tr('Invalid sink creation'))
+        else:
+            sink = input_layer
+            dest_id = sink.id()
 
-        return {self.OUTPUT: dest_id}
-
-    def get_parquet_file(self, comune, feedback):
-        """Esegue la prima query per ottenere il nome del file parquet e info sul comune"""
-        feedback.pushInfo(f"Ricerca comune: {comune}")
-        
-        con = duckdb.connect()
         try:
-            # Prima cerca corrispondenza esatta per codice comune
-            query = """
-            SELECT file, comune, denominazione_it 
-            FROM 'https://raw.githubusercontent.com/ondata/dati_catastali/main/S_0000_ITALIA/anagrafica/index.parquet' 
-            WHERE comune LIKE ? OR denominazione_it ILIKE ?
+            # Connessione al database
+            con = duckdb.connect()
+            
+            # Query per il file parquet
+            feedback.pushInfo(self.tr('Ricerca file parquet...'))
+            query = f"""
+            SELECT file 
+            FROM '{self.parquet_index}'
+            WHERE comune LIKE '{comune}'
+            LIMIT 1
             """
-            result = con.execute(query, [comune, f'%{comune}%']).fetchall()
+            result = con.execute(query).fetchall()
             
             if not result:
-                feedback.reportError("Nessun comune trovato con il codice o nome specificato")
-                return None
-            
-            if len(result) > 1:
-                feedback.pushInfo("\nComuni trovati:")
-                for r in result:
-                    feedback.pushInfo(f"- Codice: {r[1]}, Nome: {r[2]}")
-                feedback.pushInfo("\nInserisci il codice esatto del comune desiderato.")
-                return None
-            
+                raise QgsProcessingException(
+                    self.tr('Nessun file trovato per il comune specificato')
+                )
+                
             file_name = result[0][0]
-            codice = result[0][1]
-            nome = result[0][2]
+            feedback.pushInfo(f'File trovato: {file_name}')
             
-            feedback.pushInfo(f"Comune trovato: {nome} (Codice: {codice})")
-            feedback.pushInfo(f"File associato: {file_name}")
-            
-            return file_name
-        finally:
-            con.close()
-
-    def get_coordinates(self, comune, foglio, particella, file_name, feedback):
-        """Esegue la seconda query per ottenere le coordinate"""
-        feedback.pushInfo(f"Ricerca coordinate in {file_name}")
-        
-        con = duckdb.connect()
-        try:
-            url = f'https://raw.githubusercontent.com/ondata/dati_catastali/main/S_0000_ITALIA/anagrafica/{file_name}'
-            query = """
+            # Query per le coordinate
+            url = f'{self.parquet_base}{file_name}'
+            query = f"""
             SELECT x, y 
-            FROM read_parquet(?) 
-            WHERE comune LIKE ? 
-            AND foglio LIKE ? 
-            AND particella LIKE ?
+            FROM read_parquet('{url}')
+            WHERE comune LIKE '{comune}' 
+            AND foglio LIKE '{foglio}' 
+            AND particella LIKE '{particella}'
             """
-            result = con.execute(query, [url, comune, foglio, particella]).fetchall()
             
-            if result and len(result) > 0:
-                x = float(result[0][0]) / 1000000
-                y = float(result[0][1]) / 1000000
-                feedback.pushInfo(f"Coordinate trovate: X={x}, Y={y}")
-                return x, y
-            else:
-                feedback.reportError("Nessun risultato trovato per i parametri specificati")
-                return None
+            result = con.execute(query).fetchall()
+            if not result:
+                raise QgsProcessingException(self.tr('Coordinate non trovate'))
+                
+            x = float(result[0][0]) / 1000000
+            y = float(result[0][1]) / 1000000
+            feedback.pushInfo(f'Coordinate trovate: X={x}, Y={y}')
+            
+            # Preparazione WFS Layer
+            uri = (f"pagingEnabled='true' "
+                   f"preferCoordinatesForWfsT11='false' "
+                   f"restrictToRequestBBOX='1' "
+                   f"srsname='EPSG:6706' "
+                   f"typename='CP:CadastralParcel' "
+                   f"url='{self.wfs_url}' "
+                   f"version='2.0.0'")
+            
+            wfs_layer = QgsVectorLayer(uri, "catasto_query", "WFS")
+            if not wfs_layer.isValid():
+                raise QgsProcessingException(self.tr('WFS layer non valido'))
+                
+            # Richiesta features
+            point = QgsGeometry.fromPointXY(QgsPointXY(x, y))
+            request = QgsFeatureRequest().setFilterRect(point.boundingBox())
+            features = list(wfs_layer.getFeatures(request))
+            
+            feature_count = len(features)
+            feedback.pushInfo(f'Trovate {feature_count} particelle')
+            
+            # Gestione features esistenti
+            existing_refs = set()
+            if input_layer is not None:
+                existing_refs = set(feat['NATIONALCADASTRALREFERENCE'] for feat in input_layer.getFeatures())
+                sink.startEditing()
+
+            last_added_feature = None
+            last_ref_catastale = None
+
+            # Processo le features
+            for current, feat in enumerate(features):
+                if feedback.isCanceled():
+                    break
+                    
+                ref_catastale = feat['NATIONALCADASTRALREFERENCE']
+                
+                if ref_catastale in existing_refs:
+                    continue
+                    
+                new_feat = QgsFeature(fields)
+                new_feat['NATIONALCADASTRALREFERENCE'] = ref_catastale
+                new_feat['ADMIN'] = ref_catastale[:4]
+                new_feat['SEZIONE'] = ref_catastale[4:5]
+                new_feat['FOGLIO'] = ref_catastale[5:9]
+                new_feat['PARTICELLA'] = ref_catastale.split('.')[-1]
+                
+                # Calcolo area
+                geom = feat.geometry()
+                new_feat.setGeometry(geom)
+                area = QgsExpression("Area(transform(@geometry,'EPSG:6706','EPSG:3035'))")
+                context = QgsExpressionContext()
+                context.setFeature(new_feat)
+                area_value = area.evaluate(context)
+                new_feat['AREA'] = area_value
+                
+                if input_layer is not None:
+                    sink.addFeature(new_feat)
+                else:
+                    sink.addFeature(new_feat, QgsFeatureSink.FastInsert)
+                    
+                last_added_feature = new_feat
+                last_ref_catastale = ref_catastale
+                feedback.setProgress(int(current * 100 / feature_count))
+
+            # Commit modifiche
+            if input_layer is not None:
+                sink.commitChanges()
+                sink.updateExtents()
+                sink.triggerRepaint()
+
+            # Zoom all'ultima feature
+            if last_added_feature:
+                canvas = iface.mapCanvas()
+                
+                try:
+                    # Se è un layer esistente, usa quello
+                    if input_layer is not None:
+                        target_layer = input_layer
+                    else:
+                        # Altrimenti, aggiungi il nuovo layer al progetto
+                        memory_layer = QgsVectorLayer(f"MultiPolygon?crs={output_crs.authid()}", "Particelle trovate", "memory")
+                        memory_layer.dataProvider().addAttributes(fields)
+                        memory_layer.updateFields()
+                        memory_layer.dataProvider().addFeatures([last_added_feature])
+                        QgsProject.instance().addMapLayer(memory_layer)
+                        target_layer = memory_layer
+                    
+                    if target_layer.isValid() and last_added_feature.hasGeometry():
+                        # Zoom alla feature
+                        bbox = last_added_feature.geometry().boundingBox()
+                        bbox.scale(1.2)
+                        
+                        target_layer.removeSelection()
+                        target_layer.select(last_added_feature.id())
+                        
+                        canvas.setDestinationCrs(target_layer.crs())
+                        canvas.setExtent(bbox)
+                        canvas.refresh()
+                        
+                        feedback.pushInfo(
+                            f"Zoom effettuato alla particella {last_added_feature['PARTICELLA']}"
+                        )
+                    else:
+                        feedback.pushWarning("Impossibile eseguire lo zoom: layer o geometria non validi")
+                
+                except Exception as e:
+                    feedback.pushWarning(f"Errore durante lo zoom: {str(e)}")
+
+        except duckdb.Error as e:
+            raise QgsProcessingException(f"Errore DuckDB: {str(e)}")
+        except Exception as e:
+            raise QgsProcessingException(str(e))
         finally:
             con.close()
 
-    def get_particella_wfs(self, x, y, sink, input_layer, feedback):
-        """Funzione per ottenere i dati WFS della particella"""
-        feedback.pushInfo("Richiedo dati WFS...")
-        
-        base_url = 'https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php'
-        uri = (f"pagingEnabled='true' "
-               f"preferCoordinatesForWfsT11='false' "
-               f"restrictToRequestBBOX='1' "
-               f"srsname='EPSG:6706' "
-               f"typename='CP:CadastralParcel' "
-               f"url='{base_url}' "
-               f"version='2.0.0' "
-               f"language='ita'")
-        
-        wfs_layer = QgsVectorLayer(uri, "catasto_query", "WFS")
-        
-        if not wfs_layer.isValid():
-            error_msg = wfs_layer.dataProvider().error().message() if wfs_layer.dataProvider() else "Nessun dettaglio disponibile"
-            feedback.reportError(f"Layer WFS non valido: {error_msg}")
-            return False, None
-        
-        feedback.pushInfo("Layer WFS caricato con successo")
-        
-        point = QgsGeometry.fromPointXY(QgsPointXY(x, y))
-        request = QgsFeatureRequest().setFilterRect(point.boundingBox())
-        features = list(wfs_layer.getFeatures(request))
-        
-        feedback.pushInfo(f"Features trovate: {len(features)}")
-        
-        # Get existing refs if input_layer exists
-        existing_refs = set()
-        if input_layer:
-            existing_refs = set(feat['NATIONALCADASTRALREFERENCE'] for feat in input_layer.getFeatures())
-            feedback.pushInfo(f"Riferimenti catastali esistenti: {len(existing_refs)}")
-        
-        features_added = 0
-        last_geometry = None  # Per tracciare l'ultima geometria
-        
-        for feat in features:
-            # Ottieni il riferimento catastale
-            ref_catastale = feat['NATIONALCADASTRALREFERENCE']
-            
-            # Skip if already exists
-            if ref_catastale in existing_refs:
-                feedback.pushInfo(f"Particella {ref_catastale} già presente nel layer")
-                continue
-            
-            new_feat = QgsFeature()
-            new_feat.setGeometry(feat.geometry())
-            
-            # Imposta gli attributi
-            # Trasforma la geometria per il calcolo dell'area
-            geom = feat.geometry()
-            if geom:
-                # Crea il sistema di riferimento di origine e destinazione
-                source_crs = QgsCoordinateReferenceSystem('EPSG:6706')
-                dest_crs = QgsCoordinateReferenceSystem('EPSG:3045')
-                
-                # Crea il trasformatore di coordinate
-                xform = QgsCoordinateTransform(source_crs, dest_crs, QgsProject.instance())
-                
-                # Crea una copia della geometria e la trasforma
-                geom_transformed = QgsGeometry(geom)
-                geom_transformed.transform(xform)
-                
-                # Calcola l'area nella proiezione corretta
-                area = geom_transformed.area()
-            else:
-                area = 0
-                
-            attributes = [
-                ref_catastale,
-                ref_catastale[:4],
-                ref_catastale[4:5],
-                ref_catastale[5:9],
-                ref_catastale.split('.')[-1],
-                area  # Area in metri quadri nel sistema EPSG:3045
-            ]
-            
-            new_feat.setAttributes(attributes)
-            sink.addFeature(new_feat)
-            features_added += 1
-            existing_refs.add(ref_catastale)  # Add to existing refs to prevent duplicates
-            last_geometry = feat.geometry()  # Salva l'ultima geometria
-        
-        feedback.pushInfo(f"Aggiunte {features_added} nuove particelle")
-        
-        # Restituisci sia il successo che l'ultima geometria
-        return True, last_geometry
-
-    def postProcessAlgorithm(self, context, feedback):
-        """
-        Chiamato dopo che l'algoritmo ha terminato l'esecuzione.
-        """
-        layer = context.getMapLayer(self.last_layer_id)
-        if hasattr(self, 'last_geometry') and self.last_geometry and layer:
-            try:
-                from qgis.utils import iface
-                if iface and iface.mapCanvas():
-                    rect = self.last_geometry.boundingBox()
-                    rect.scale(1.2)
-                    iface.mapCanvas().setExtent(rect)
-                    iface.mapCanvas().refresh()
-                    feedback.pushInfo("Zoom eseguito sull'ultima particella")
-            except Exception as e:
-                feedback.reportError(f"Errore durante lo zoom: {str(e)}")
-        return {}
-
-class ZoomToGeometry(QgsProcessingLayerPostProcessorInterface):
-    def __init__(self, geometry):
-        super().__init__()
-        self.geometry = geometry
-
-    def postProcessLayer(self, layer, context, feedback):
-        if not layer or not self.geometry:
-            return
-            
-        try:
-            from qgis.utils import iface
-            if iface and iface.mapCanvas():
-                # Ottieni il bbox della geometria
-                rect = self.geometry.boundingBox()
-                # Espandi leggermente il bbox
-                rect.scale(1.2)
-                # Imposta l'extent della mappa
-                iface.mapCanvas().setExtent(rect)
-                iface.mapCanvas().refresh()
-        except Exception as e:
-            feedback.reportError(f"Errore durante lo zoom: {str(e)}")
+        return {self.OUTPUT: dest_id}
