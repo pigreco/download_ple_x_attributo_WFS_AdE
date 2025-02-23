@@ -56,10 +56,10 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             - Supporta l'aggiunta a layer esistenti o la creazione di nuovi layer
             - Calcola l'area in metri quadri
             - Esegue lo zoom automatico sull'ultima particella trovata
-            - Gestisce correttamente i sistemi di coordinate (EPSG:6706 -> EPSG:3045)
         
         <b>PARAMETRI RICHIESTI:</b>
             - Codice o Nome Comune: puoi inserire il codice catastale (es: M011) o il nome del comune (es: VILLAROSA)
+            - Se il nome del comune è presente per più particelle, scrivere il codice catastale
             - Numero foglio (es: 2) fa il padding a 4 cifre
             - Numero particella (es: 2)
         
