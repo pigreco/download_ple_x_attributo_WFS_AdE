@@ -94,7 +94,7 @@ Se si [lancia](https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.
 
 Il motore di *query* è basato semplicemente su dei file **`parquet`** esposti in **HTTP**. Questo è possibile perché - come ha scritto Andrea Borruso - se si ha a disposizione un URL di un file `parquet` è [come avere delle API](https://aborruso.github.io/posts/duckdb-intro-csv/#%C3%A8-come-avere-delle-api).
 
-Con un *client* come [duckdb](https://duckdb.org/) (via `cli` o via linguaggio di *scripting*) è possibile infatti lanciare delle *query* `SQL` in modo diretto an URL di un file `parquet`.
+Con un *client* come [duckdb](https://duckdb.org/) (via `cli` o via linguaggio di *scripting*) è possibile infatti lanciare delle *query* `SQL` in modo diretto a un URL di un file `parquet`.
 
 Per avere ad esempio delle info utili sulla particella `2` del foglio `0002` del comune con codice catastale `M011`, delle particelle della regione Sicilia, è possibile lanciare:
 
@@ -119,12 +119,12 @@ INSPIREID_LOCALID = IT.AGE.PLA.M011_000200.2
                 y = 37639896
 ```
 
-Le **coordinate** `x` e `y` sono archiviate come **numeri interi**, per ottimizzare le dimensioni dei file `parquet`. Ma in realtà sono latitudine e longitudine espresse in gradi decimali, con 6 cifre decimali, moltiplicate per `1.000.000`. Ad esempio:
+Le **coordinate** `x` e `y` sono archiviate come **numeri interi**, per ottimizzare le dimensioni dei file `parquet`. Ma in realtà sono longitudine e latitudine espresse in gradi decimali, con 6 cifre decimali, moltiplicate per `1.000.000`. Ad esempio:
 
 - Coordinate memorizzate: `x=14181642`, `y=37639896`
 - Coordinate reali: `lon=14.181642`, `lat=37.639896`
 
-Nell'esempio di sopra si interroga il file `19_Sicilia.parquet`, perché è un Comune siciliano. Ma se si volesse interrogare un Comune di un'altra regione e sapere quale file interrogare, è stato reso disponibile un file per rispondere a questa esigenza.<br>
+Nell'esempio di sopra si interroga il file `19_Sicilia.parquet`, perché `M011` è un Comune siciliano. Ma se si volesse interrogare un Comune di un'altra regione e sapere quale file interrogare, è stato reso disponibile un file per rispondere a questa esigenza.<br>
 Se ad esempio il Comune è `D969` (che è il codice catastale di Genova), è possibile lanciare:
 
 ```bash
