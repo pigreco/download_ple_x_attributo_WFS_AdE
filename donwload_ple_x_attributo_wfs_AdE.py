@@ -1,4 +1,12 @@
 # -*- coding: utf-8 -*-
+"""
+/***************************************************************************
+ WFS Catasto Agenzia delle Entrate CC BY 4.0
+                              -------------------
+        copyright            : (C) 2025 by Totò Fiandaca
+        email                : pigrecoinfinito@gmail.com
+ ***************************************************************************/
+"""
 
 from qgis.PyQt.QtCore import QCoreApplication, QVariant
 from qgis.PyQt.QtWidgets import QMessageBox
