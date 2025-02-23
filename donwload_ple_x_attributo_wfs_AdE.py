@@ -43,10 +43,10 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         return self.tr('Particelle Catastali su WFS AdE')
 
     def group(self):
-        return self.tr('Catasto')
+        return self.tr('Catasto_WFS')
 
     def groupId(self):
-        return 'Catasto'
+        return 'Catasto_WFS'
 
     def shortHelpString(self):
         return self.tr("""Questo algoritmo recupera dati catastali tramite il servizio WFS dell'Agenzia delle Entrate.
@@ -414,7 +414,7 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
 
     def postProcessAlgorithm(self, context, feedback):
         """
-        Gestisce lo zoom all'ultima particella inserita dopo l'esecuzione dell'algoritmo.
+        Gestisce lo zoom all'ultima particella inserita con corretta trasformazione CRS.
         """
         if not hasattr(self, 'last_geometry') or not self.last_geometry:
             return {}
@@ -422,31 +422,45 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         try:
             from qgis.utils import iface
             if iface and iface.mapCanvas():
-                # Calcola il bounding box con margine
-                rect = self.last_geometry.boundingBox()
+                # Sistema di riferimento della particella (EPSG:6706)
+                source_crs = QgsCoordinateReferenceSystem('EPSG:6706')
+                # Sistema di riferimento del progetto
+                dest_crs = QgsProject.instance().crs()
                 
-                # Calcola un margine proporzionale alla dimensione della particella
+                # Crea il trasformatore di coordinate
+                transform = QgsCoordinateTransform(source_crs, dest_crs, QgsProject.instance())
+                
+                # Copia la geometria originale
+                geom = QgsGeometry(self.last_geometry)
+                # Trasforma la geometria nel CRS del progetto
+                geom.transform(transform)
+                
+                # Calcola il bounding box nel CRS del progetto
+                rect = geom.boundingBox()
+                
+                # Calcola margine proporzionale (20%)
                 width = rect.width()
                 height = rect.height()
-                margin = max(width, height) * 0.2  # 20% di margine
+                margin = max(width, height) * 0.2
                 
-                # Espandi il rettangolo in modo uniforme
+                # Espandi il rettangolo
                 rect.setXMinimum(rect.xMinimum() - margin)
                 rect.setXMaximum(rect.xMaximum() + margin)
                 rect.setYMinimum(rect.yMinimum() - margin)
                 rect.setYMaximum(rect.yMaximum() + margin)
                 
-                # Imposta l'estensione e forza l'aggiornamento
+                # Imposta l'estensione e aggiorna
                 iface.mapCanvas().setExtent(rect)
                 iface.mapCanvas().refresh()
                 
-                # Evidenzia temporaneamente la particella
+                # Evidenzia la particella
                 iface.mapCanvas().flashFeatureIds(
                     context.getMapLayer(self.last_layer_id),
                     [self.last_feature_id] if hasattr(self, 'last_feature_id') else []
                 )
                 
-                feedback.pushInfo("Zoom eseguito con successo sull'ultima particella")
+                feedback.pushInfo(f"Zoom eseguito con successo (da EPSG:6706 a {dest_crs.authid()})")
+                
         except Exception as e:
             feedback.reportError(f"Errore durante lo zoom: {str(e)}")
         
@@ -464,12 +478,35 @@ class ZoomToGeometry(QgsProcessingLayerPostProcessorInterface):
         try:
             from qgis.utils import iface
             if iface and iface.mapCanvas():
-                # Ottieni il bbox della geometria
-                rect = self.geometry.boundingBox()
-                # Espandi leggermente il bbox
-                rect.scale(1.2)
+                # Sistema di riferimento della geometria (EPSG:6706)
+                geom_crs = QgsCoordinateReferenceSystem('EPSG:6706')
+                
+                # Assicurati che la geometria sia in EPSG:6706
+                geom = QgsGeometry(self.geometry)
+                if layer.crs() != geom_crs:
+                    # Se necessario, trasforma la geometria in EPSG:6706
+                    transform_to_6706 = QgsCoordinateTransform(layer.crs(), geom_crs, QgsProject.instance())
+                    geom.transform(transform_to_6706)
+                
+                # Ottieni il bbox della geometria in EPSG:6706
+                rect = geom.boundingBox()
+                
+                # Ottieni il sistema di riferimento del progetto
+                project_crs = QgsProject.instance().crs()
+                
+                # Crea il trasformatore da EPSG:6706 al CRS del progetto
+                transform = QgsCoordinateTransform(geom_crs, project_crs, QgsProject.instance())
+                
+                # Trasforma il bbox nel sistema di riferimento del progetto
+                rect_transformed = transform.transformBoundingBox(rect)
+                
+                # Espandi leggermente il bbox (20%)
+                rect_transformed.scale(1.2)
+                
                 # Imposta l'extent della mappa
-                iface.mapCanvas().setExtent(rect)
+                iface.mapCanvas().setExtent(rect_transformed)
                 iface.mapCanvas().refresh()
+                
+                feedback.pushInfo(f"Zoom eseguito da EPSG:6706 a {project_crs.authid()}")
         except Exception as e:
             feedback.reportError(f"Errore durante lo zoom: {str(e)}")
