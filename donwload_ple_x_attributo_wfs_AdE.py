@@ -40,13 +40,13 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         return 'ricercaparticelle'
 
     def displayName(self):
-        return self.tr('Ricerca Particelle Catastali')
+        return self.tr('Particelle Catastali su WFS AdE')
 
     def group(self):
         return self.tr('Catasto')
 
     def groupId(self):
-        return 'catasto'
+        return 'Catasto'
 
     def shortHelpString(self):
         return self.tr("""Questo algoritmo recupera dati catastali tramite il servizio WFS dell'Agenzia delle Entrate.
@@ -60,7 +60,7 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         <b>PARAMETRI RICHIESTI:</b>
             - Codice o Nome Comune: puoi inserire il codice catastale (es: M011) o il nome del comune (es: VILLAROSA)
             - Se il nome del comune è presente per più particelle, scrivere il codice catastale
-            - Numero foglio (es: 2) fa il padding a 4 cifre
+            - Numero foglio (es: 2) fa in automatico il padding a 4 cifre
             - Numero particella (es: 2)
         
         <b>ATTRIBUTI DEL LAYER:</b>
@@ -126,14 +126,21 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         input_layer = self.parameterAsVectorLayer(parameters, self.INPUT_LAYER, context)
 
         if input_layer:
-            # Use existing layer
             feedback.pushInfo(f'Aggiungendo dati al layer esistente: {input_layer.name()}')
+            
+            # Verifica se il layer è un geopackage
+            is_gpkg = input_layer.source().lower().endswith('.gpkg')
+            
+            if is_gpkg:
+                # Per Geopackage, usa una transazione esplicita
+                input_layer.dataProvider().enterUpdateMode()
             
             sink = input_layer.dataProvider()
             dest_id = input_layer.id()
             
-            # Assicuriamoci che il layer sia in modalità editing
-            input_layer.startEditing()
+            # Non chiamare startEditing per geopackage
+            if not is_gpkg:
+                input_layer.startEditing()
         else:
             # Create new layer with fields
             feedback.pushInfo('Creando nuovo layer')
@@ -183,7 +190,10 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
                 feedback.reportError(self.tr('Errore nel recupero dei dati WFS'))
             else:
                 if input_layer:
-                    input_layer.commitChanges()
+                    if is_gpkg:
+                        input_layer.dataProvider().leaveUpdateMode()
+                    else:
+                        input_layer.commitChanges()
             
                 # Salva l'ultima geometria e l'ID del layer per il post-processing
                 if last_geometry:
@@ -194,7 +204,10 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         except Exception as e:
             feedback.reportError(f"Errore nel recupero dei dati WFS: {str(e)}")
             if input_layer:
-                input_layer.rollBack()
+                if is_gpkg:
+                    input_layer.dataProvider().leaveUpdateMode()
+                else:
+                    input_layer.rollBack()
 
         return {self.OUTPUT: dest_id}
 
@@ -265,93 +278,135 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
     def get_particella_wfs(self, x, y, sink, input_layer, feedback):
         """Funzione per ottenere i dati WFS della particella"""
         feedback.pushInfo("Richiedo dati WFS...")
+        wfs_layer = None
         
-        base_url = 'https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php'
-        uri = (f"pagingEnabled='true' "
-               f"preferCoordinatesForWfsT11='false' "
-               f"restrictToRequestBBOX='1' "
-               f"srsname='EPSG:6706' "
-               f"typename='CP:CadastralParcel' "
-               f"url='{base_url}' "
-               f"version='2.0.0' "
-               f"language='ita'")
-        
-        wfs_layer = QgsVectorLayer(uri, "catasto_query", "WFS")
-        
-        if not wfs_layer.isValid():
-            error_msg = wfs_layer.dataProvider().error().message() if wfs_layer.dataProvider() else "Nessun dettaglio disponibile"
-            feedback.reportError(f"Layer WFS non valido: {error_msg}")
+        try:
+            base_url = 'https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php'
+            uri = (f"pagingEnabled='true' "
+                   f"preferCoordinatesForWfsT11='false' "
+                   f"restrictToRequestBBOX='1' "
+                   f"srsname='EPSG:6706' "
+                   f"typename='CP:CadastralParcel' "
+                   f"url='{base_url}' "
+                   f"version='2.0.0' "
+                   f"language='ita'")
+            
+            wfs_layer = QgsVectorLayer(uri, "catasto_query", "WFS")
+            
+            if not wfs_layer.isValid():
+                error_msg = wfs_layer.dataProvider().error().message() if wfs_layer.dataProvider() else "Nessun dettaglio disponibile"
+                feedback.reportError(f"Layer WFS non valido: {error_msg}")
+                return False, None
+            
+            feedback.pushInfo("Layer WFS caricato con successo")
+            
+            # Crea un buffer intorno al punto per migliorare la ricerca
+            point = QgsGeometry.fromPointXY(QgsPointXY(x, y))
+            buffer_size = 0.00001  # Circa 1m in gradi decimali
+            search_area = point.buffer(buffer_size, 5)
+            
+            request = QgsFeatureRequest().setFilterRect(search_area.boundingBox())
+            features = list(wfs_layer.getFeatures(request))
+            
+            feedback.pushInfo(f"Features trovate: {len(features)}")
+            
+            # Get existing refs if input_layer exists
+            existing_refs = set()
+            if input_layer:
+                existing_refs = set(feat['NATIONALCADASTRALREFERENCE'] for feat in input_layer.getFeatures())
+                feedback.pushInfo(f"Riferimenti catastali esistenti: {len(existing_refs)}")
+            
+            # Prepara i sistemi di riferimento una sola volta
+            source_crs = QgsCoordinateReferenceSystem('EPSG:6706')
+            dest_crs = QgsCoordinateReferenceSystem('EPSG:3045')  # ETRS89 / UTM zone 32N
+            xform = QgsCoordinateTransform(source_crs, dest_crs, QgsProject.instance())
+            
+            features_added = 0
+            last_geometry = None
+            
+            # Ottieni i campi del layer di input se esiste
+            if input_layer:
+                field_names = [field.name() for field in input_layer.fields()]
+                feedback.pushInfo(f"Campi del layer: {field_names}")
+            
+            for feat in features:
+                try:
+                    ref_catastale = feat['NATIONALCADASTRALREFERENCE']
+                    
+                    if ref_catastale in existing_refs:
+                        feedback.pushInfo(f"Particella {ref_catastale} già presente nel layer")
+                        continue
+                    
+                    geom = feat.geometry()
+                    if not geom or not geom.isGeosValid():
+                        feedback.pushWarning(f"Geometria non valida per {ref_catastale}")
+                        continue
+                    
+                    new_feat = QgsFeature()
+                    new_feat.setGeometry(geom)
+                    
+                    # Calcolo area con trasformazione sicura
+                    try:
+                        geom_transformed = QgsGeometry(geom)
+                        if geom_transformed.transform(xform) == 0:  # 0 indica successo
+                            area = geom_transformed.area()
+                        else:
+                            area = 0
+                            feedback.pushWarning(f"Errore nella trasformazione della geometria per {ref_catastale}")
+                    except Exception as e:
+                        area = 0
+                        feedback.pushWarning(f"Errore nel calcolo dell'area per {ref_catastale}: {str(e)}")
+                    
+                    # Estrai i componenti dal ref_catastale in modo sicuro
+                    parts = ref_catastale.split('.')
+                    admin = parts[0][:4] if len(parts) > 0 and len(parts[0]) >= 4 else ''
+                    sezione = parts[0][4:5] if len(parts[0]) >= 5 else ''
+                    foglio = parts[0][5:9] if len(parts[0]) >= 9 else ''
+                    particella = parts[-1] if len(parts) > 1 else ''
+                    
+                    if input_layer:
+                        # Crea un dizionario degli attributi
+                        attr_dict = {
+                            'NATIONALCADASTRALREFERENCE': ref_catastale,
+                            'ADMIN': admin,
+                            'SEZIONE': sezione,
+                            'FOGLIO': foglio,
+                            'PARTICELLA': particella,
+                            'AREA': area
+                        }
+                        
+                        # Crea la lista degli attributi nell'ordine corretto
+                        attributes = []
+                        for field_name in field_names:
+                            attributes.append(attr_dict.get(field_name, None))
+                    else:
+                        # Per nuovo layer, usa l'ordine predefinito
+                        attributes = [ref_catastale, admin, sezione, foglio, particella, area]
+                    
+                    new_feat.setAttributes(attributes)
+                    
+                    if sink.addFeature(new_feat):
+                        features_added += 1
+                        existing_refs.add(ref_catastale)
+                        last_geometry = geom
+                        self.last_feature_id = new_feat.id()
+                    else:
+                        feedback.pushWarning(f"Impossibile aggiungere la feature {ref_catastale}")
+                    
+                except Exception as e:
+                    feedback.pushWarning(f"Errore nell'elaborazione della feature: {str(e)}")
+                    continue
+            
+            feedback.pushInfo(f"Aggiunte {features_added} nuove particelle")
+            return True, last_geometry
+            
+        except Exception as e:
+            feedback.reportError(f"Errore generale nel WFS: {str(e)}")
             return False, None
-        
-        feedback.pushInfo("Layer WFS caricato con successo")
-        
-        point = QgsGeometry.fromPointXY(QgsPointXY(x, y))
-        request = QgsFeatureRequest().setFilterRect(point.boundingBox())
-        features = list(wfs_layer.getFeatures(request))
-        
-        feedback.pushInfo(f"Features trovate: {len(features)}")
-        
-        # Get existing refs if input_layer exists
-        existing_refs = set()
-        if input_layer:
-            existing_refs = set(feat['NATIONALCADASTRALREFERENCE'] for feat in input_layer.getFeatures())
-            feedback.pushInfo(f"Riferimenti catastali esistenti: {len(existing_refs)}")
-        
-        features_added = 0
-        last_geometry = None  # Per tracciare l'ultima geometria
-        
-        for feat in features:
-            # Ottieni il riferimento catastale
-            ref_catastale = feat['NATIONALCADASTRALREFERENCE']
             
-            # Skip if already exists
-            if ref_catastale in existing_refs:
-                feedback.pushInfo(f"Particella {ref_catastale} già presente nel layer")
-                continue
-            
-            new_feat = QgsFeature()
-            new_feat.setGeometry(feat.geometry())
-            
-            # Imposta gli attributi
-            # Trasforma la geometria per il calcolo dell'area
-            geom = feat.geometry()
-            if geom:
-                # Crea il sistema di riferimento di origine e destinazione
-                source_crs = QgsCoordinateReferenceSystem('EPSG:6706')
-                dest_crs = QgsCoordinateReferenceSystem('EPSG:3045')
-                
-                # Crea il trasformatore di coordinate
-                xform = QgsCoordinateTransform(source_crs, dest_crs, QgsProject.instance())
-                
-                # Crea una copia della geometria e la trasforma
-                geom_transformed = QgsGeometry(geom)
-                geom_transformed.transform(xform)
-                
-                # Calcola l'area nella proiezione corretta
-                area = geom_transformed.area()
-            else:
-                area = 0
-                
-            attributes = [
-                ref_catastale,
-                ref_catastale[:4],
-                ref_catastale[4:5],
-                ref_catastale[5:9],
-                ref_catastale.split('.')[-1],
-                area  # Area in metri quadri nel sistema EPSG:3045
-            ]
-            
-            new_feat.setAttributes(attributes)
-            sink.addFeature(new_feat)
-            features_added += 1
-            existing_refs.add(ref_catastale)  # Add to existing refs to prevent duplicates
-            last_geometry = feat.geometry()  # Salva l'ultima geometria
-            self.last_feature_id = new_feat.id()  # Salva l'ID dell'ultima feature
-        
-        feedback.pushInfo(f"Aggiunte {features_added} nuove particelle")
-        
-        # Restituisci sia il successo che l'ultima geometria
-        return True, last_geometry
+        finally:
+            if wfs_layer:
+                del wfs_layer
 
     def postProcessAlgorithm(self, context, feedback):
         """

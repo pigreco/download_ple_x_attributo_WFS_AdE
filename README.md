@@ -1,8 +1,8 @@
 # download_ple_x_attributo_WFS_AdE
 
-Ricerca e download di particelle (_per attributo_) usando il WFS dell Agenzia delle Entrate
+Ricerca e download di particelle (_per attributo_) usando il WFS dell Agenzia delle Entrate.
 
-![](2025-02-23_12h03_07.gif)
+![](./imgs/demo.gif)
 
 Questo algoritmo recupera dati catastali tramite il servizio WFS dell'Agenzia delle Entrate.
 
@@ -27,3 +27,19 @@ Questo algoritmo recupera dati catastali tramite il servizio WFS dell'Agenzia de
 - AREA: superficie in metri quadri
 
 Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
+
+## Come installare l'algoritmo nel Processing di QGIS
+
+![](./imgs/install.gif)
+
+- L'algoritmo funziona solo da Processing di QGIS;
+- Vai su Strumenti di Processing
+- 'Aggiungi Script agli Strumenti...' dopo aver cliccato sull'Icona di Python:
+
+![](./imgs/strumenti_processing.png)
+- 
+
+## Riferimenti
+
+- [RNDT Scheda metadati](https://geodati.gov.it/geoportale/visualizzazione-metadati/scheda-metadati/?uuid=age:S_0000_ITALIA)
+- [Cartografia catastale WFS](https://www.agenziaentrate.gov.it/portale/cartografia-catastale-wfs)
