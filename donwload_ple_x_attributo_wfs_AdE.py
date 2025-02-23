@@ -44,7 +44,7 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         return self.tr("""Questo algoritmo recupera dati catastali tramite il servizio WFS dell'Agenzia delle Entrate.
 
         <b>FUNZIONALITÀ</b>:
-            - Ricerca particelle catastali a partire da coordinate geografiche
+            - Ricerca particelle catastali per attributo (comune, foglio, particella)
             - Supporta l'aggiunta a layer esistenti o la creazione di nuovi layer
             - Calcola l'area in metri quadri
             - Esegue lo zoom automatico sull'ultima particella trovata
