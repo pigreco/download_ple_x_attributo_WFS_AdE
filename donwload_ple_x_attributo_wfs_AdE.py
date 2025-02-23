@@ -112,7 +112,7 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
 
         # Ottieni il timestamp corrente nel formato desiderato
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        layer_name = f'ple_{timestamp}'
+        layer_name = f'ple_out_{timestamp}'
 
         self.addParameter(
             QgsProcessingParameterFeatureSink(
@@ -346,7 +346,7 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
                     ref_catastale = feat['NATIONALCADASTRALREFERENCE']
                     
                     if ref_catastale in existing_refs:
-                        feedback.pushInfo(f"Particella {ref_catastale} già presente nel layer")
+                        feedback.pushInfo(f"\nNB: Particella {ref_catastale} già presente nel layer\n")
                         continue
                     
                     geom = feat.geometry()
