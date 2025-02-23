@@ -3,7 +3,6 @@
     - [Interrogare il WFS del catasto](#interrogare-il-wfs-del-catasto)
     - [Come funziona](#come-funziona)
 
-
 # Introduzione
 
 Quando il servizio WFS del catasto è stato pubblicato, nella richiesta `GetCapabilities` si leggeva che erano **abilitate** le ***query* per attributo**.<br>
