@@ -94,7 +94,7 @@ Se si [lancia](https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.
 
 Il motore di *query* è basato semplicemente su dei file **`parquet`** esposti in **HTTP**. Questo è possibile perché - come ha scritto Andrea Borruso - se si ha a disposizione un URL di un file `parquet` è [come avere delle API](https://aborruso.github.io/posts/duckdb-intro-csv/#%C3%A8-come-avere-delle-api).
 
-Con un *client* come [duckdb](https://duckdb.org/) (via `cli` o via linguaggio di *scripting*) è possibile infatti lanciare delle *query* SQL in modo diretto an URL di un file `parquet`.
+Con un *client* come [duckdb](https://duckdb.org/) (via `cli` o via linguaggio di *scripting*) è possibile infatti lanciare delle *query* `SQL` in modo diretto an URL di un file `parquet`.
 
 Per avere ad esempio delle info utili sulla particella `2` del foglio `0002` del comune con codice catastale `M011`, delle particelle della regione Sicilia, è possibile lanciare:
 
@@ -119,10 +119,13 @@ INSPIREID_LOCALID = IT.AGE.PLA.M011_000200.2
                 y = 37639896
 ```
 
-Le coordinate `x` e `y` sono archiviate come numeri interi, per ottimizzare le dimensioni del file `parquet`. Ma in realtà sono latitudine e longitudine espresse in gradi decimali, con 6 cifre decimali, moltiplicate per `1.000.000`.
+Le **coordinate** `x` e `y` sono archiviate come **numeri interi**, per ottimizzare le dimensioni dei file `parquet`. Ma in realtà sono latitudine e longitudine espresse in gradi decimali, con 6 cifre decimali, moltiplicate per `1.000.000`. Ad esempio:
 
-Qui si interroga il file `19_Sicilia.parquet` perché è un Comune siciliano. Ma se si volesse interrogare un Comune di un'altra regione e sapere quale file interrogare, è stato reso disponibile un file per rispondere a questa esigenza.<br>
-Se ad esempio il Comune è `D969` (che è il codice catastale di **Genova**), è possibile lanciare:
+- Coordinate memorizzate: `x=14181642`, `y=37639896`
+- Coordinate reali: `lon=14.181642`, `lat=37.639896`
+
+Nell'esempio di sopra si interroga il file `19_Sicilia.parquet`, perché è un Comune siciliano. Ma se si volesse interrogare un Comune di un'altra regione e sapere quale file interrogare, è stato reso disponibile un file per rispondere a questa esigenza.<br>
+Se ad esempio il Comune è `D969` (che è il codice catastale di Genova), è possibile lanciare:
 
 ```bash
 duckdb -c "SELECT *
@@ -130,7 +133,7 @@ FROM 'https://raw.githubusercontent.com/ondata/dati_catastali/main/S_0000_ITALIA
 WHERE comune LIKE 'D969';"
 ```
 
-In output si avrà (tra le altre cose) il file da interrogare per Comune, foglio e particella, che in questo caso è `07_Liguria.parquet`:
+In output si avrà (tra le altre cose) il nome del file da interrogare, che in questo caso è `07_Liguria.parquet`:
 
 ```
           comune = D969
@@ -139,14 +142,15 @@ In output si avrà (tra le altre cose) il file da interrogare per Comune, foglio
 DENOMINAZIONE_IT = GENOVA
 ```
 
-Con le coordinate `x` e `y` ottenute dalla *query* SQL, è possibile costruire il *bounding box* per interrogare il servizio WFS del catasto e ottenere la geometria della particella.
+Con le coordinate `x` e `y` ottenute dalla *query* `SQL`, è possibile costruire il *bounding box* per interrogare il servizio WFS del catasto e ottenere la geometria della particella.
 
 Queste coordinate sono state ottenute estraendole con la funzione `ST_PointOnSurface`, su tutte le particelle catastali. La funzione `ST_PointOnSurface` restituisce un punto che è garantito essere all'interno della geometria. <br>
 Come file di input per generare questa coppia di coordinate abbiamo usato i file in formato `gpkg` (uno per ogni regione), generati da Salvatore Fiandaca a partire dai file `GML` messi a disposizione dall'Agenzia delle Entrate.
+Per estrarre queste coordinate è stato utilizzato duckdb con l'[estensione `spatial`](https://duckdb.org/docs/extensions/spatial/overview.html).
 
-Quindi il motore di *query* funziona in questo modo:
+In sintesi questo motore *query* funziona in questo modo:
 
-- si interroga il file che fa da indice, per farsi restituire il file da interrogare per un determinato codice catastale comunale;
-- ottenuto il nome del file, lo si interroga per codice catastale comunale, foglio e particella e ottenere una coppia di coordinate che ricade nella particella.
+- si interroga il file che fa da indice, per **farsi** **restituire** il **file da interrogare** per un determinato codice catastale comunale;
+- ottenuto il nome del file, lo si **interroga** per **codice catastale comunale**, **foglio** e **particella** e **ottenere** una **coppia di coordinate** che ricade nella particella.
 
-Da qui in poi il codice costruito da Salvatore, sfrutta la coppia di coordinate per fare una *query* al servizio WFS tramite un piccolissimo bounding box, costruito attorno a questa coppia.
+Da qui in poi il codice costruito da Salvatore, sfrutta la **coppia di coordinate** per fare una ***query* spaziale** al **servizio WFS**, tramite un piccolissimo **bounding box** costruito attorno a questa coppia, che restituisce la geometria della particella.
