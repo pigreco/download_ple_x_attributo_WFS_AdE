@@ -33,7 +33,7 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 
 ## Le API che permettono la ricerca
 
-- [Query engine](./reference/query_engine.md) by Andrea Borruso Ondata
+- [Query engine](./reference/query_engine.md) a cura dell'associazione [onData](https://www.ondata.it/)
 
 ## Come installare l'algoritmo nel Processing di QGIS
 
