@@ -107,10 +107,14 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             )
         )
 
+        # Ottieni il timestamp corrente nel formato desiderato
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        layer_name = f'ple_{timestamp}'
+
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.OUTPUT,
-                self.tr('Layer Particelle')
+                self.tr(layer_name)
             )
         )
 
