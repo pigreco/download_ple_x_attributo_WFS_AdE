@@ -1,6 +1,8 @@
 # download_ple_x_attributo_WFS_AdE
 
-Ricerca e download di particelle (_per attributo_) usando il WFS dell Agenzia delle Entrate.
+![](./imgs/gui.png)
+
+## Ricerca e download di particelle (_per attributo_) usando il WFS dell Agenzia delle Entrate.
 
 ![](./imgs/demo.gif)
 
@@ -30,14 +32,12 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 
 ## Come installare l'algoritmo nel Processing di QGIS
 
-![](./imgs/install.gif)
-
 - L'algoritmo funziona solo da Processing di QGIS;
 - Vai su Strumenti di Processing
-- 'Aggiungi Script agli Strumenti...' dopo aver cliccato sull'Icona di Python:
+- `Aggiungi Script agli Strumenti...` dopo aver cliccato sull'Icona di Python:
 
 ![](./imgs/strumenti_processing.png)
-- 
+- Troverai l'algoritmo nel Gruppo Script | Catasto_WFS
 
 ## Riferimenti
 
