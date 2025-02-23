@@ -6,8 +6,6 @@
 
 ![](./imgs/demo.gif)
 
-Questo algoritmo recupera dati catastali tramite il servizio WFS dell'Agenzia delle Entrate.
-
 **FUNZIONALITÀ**:
 - Ricerca particelle catastali per attributo (comune, foglio, particella)
 - Supporta l'aggiunta a layer esistenti o la creazione di nuovi layer
@@ -30,6 +28,8 @@ Questo algoritmo recupera dati catastali tramite il servizio WFS dell'Agenzia de
 - _**AREA**_: superficie in metro quadro (m²)
 
 Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
+
+![](./imgs/tabella.png)
 
 ## Come installare l'algoritmo nel Processing di QGIS
 
