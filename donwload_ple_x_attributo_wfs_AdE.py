@@ -52,7 +52,7 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         return self.tr("""Questo algoritmo recupera dati catastali tramite il servizio WFS dell'Agenzia delle Entrate.
 
         <b>FUNZIONALITÀ</b>:
-            - Ricerca particelle catastali per attributo (comune, foglio, particella)
+            - Ricerca particelle catastali per <font color='blue'>attributo</font> (comune, foglio, particella) 
             - Supporta l'aggiunta a layer esistenti o la creazione di nuovi layer
             - Calcola l'area in metri quadri
             - Esegue lo zoom automatico sull'ultima particella trovata
@@ -65,13 +65,16 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         
         <b>ATTRIBUTI DEL LAYER:</b>
             - NATIONALCADASTRALREFERENCE: codice identificativo completo
-            - ADMIN: codice comune
+            - ADMIN: codice Comune
             - SEZIONE: sezione censuaria
             - FOGLIO: numero del foglio
             - PARTICELLA: numero della particella
-            - AREA: <font color='red'>superficie in metri quadri</font>
+            - AREA: superficie in metro quadro (m²)
         
-        Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.""")
+        Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
+
+        <b>NOTA:</b>
+        Maggiori informazioni sul servizio WFS: <a href='https://www.agenziaentrate.gov.it/portale/cartografia-catastale-wfs'>Cartografia Catastale WFS</a>""")
 
     def initAlgorithm(self, config=None):
         self.addParameter(
@@ -95,7 +98,7 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterString(
                 self.INPUT_FOGLIO,
                 self.tr('Numero Foglio'),
-                defaultValue='0002'
+                defaultValue='0001'
             )
         )
         
@@ -103,7 +106,7 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterString(
                 self.INPUT_PARTICELLA,
                 self.tr('Numero Particella'),
-                defaultValue='2'
+                defaultValue='1'
             )
         )
 
@@ -128,6 +131,18 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         foglio = self.parameterAsString(parameters, self.INPUT_FOGLIO, context).strip().zfill(4)
         particella = self.parameterAsString(parameters, self.INPUT_PARTICELLA, context).strip()
         input_layer = self.parameterAsVectorLayer(parameters, self.INPUT_LAYER, context)
+
+        # Recupera il file parquet
+        try:
+            result = self.get_parquet_file(comune, feedback)
+            if not result[0]:  # file_name è None
+                if result[1]:  # è multi-comune
+                    return {}  # Non crea il layer temporaneo
+                return {self.OUTPUT: None}  # Comune non trovato
+            file_name = result[0]
+        except Exception as e:
+            feedback.reportError(f"Errore nel recupero del file parquet: {str(e)}")
+            return {self.OUTPUT: None}
 
         if input_layer:
             feedback.pushInfo(f'Aggiungendo dati al layer esistente: {input_layer.name()}')
@@ -168,15 +183,6 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
 
             if sink is None:
                 raise QgsProcessingException(self.tr('Errore nella creazione del layer di output'))
-
-        # Recupera il file parquet
-        try:
-            file_name = self.get_parquet_file(comune, feedback)
-            if not file_name:
-                return {self.OUTPUT: dest_id}
-        except Exception as e:
-            feedback.reportError(f"Errore nel recupero del file parquet: {str(e)}")
-            return {self.OUTPUT: dest_id}
 
         # Recupera le coordinate
         try:
@@ -231,14 +237,16 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             
             if not result:
                 feedback.reportError("Nessun comune trovato con il codice o nome specificato")
-                return None
+                return None, False  # Aggiungo flag False
             
             if len(result) > 1:
                 feedback.pushInfo("\nComuni trovati:")
                 for r in result:
                     feedback.pushInfo(f"- Codice: {r[1]}, Nome: {r[2]}")
-                feedback.pushInfo("\nInserisci il codice esatto del comune desiderato.")
-                return None
+                feedback.pushInfo("\nINSERISCI IL CODICE ESATTO DEL COMUNE DESIDERATO.")
+                self.last_geometry = None  # Resetta la geometria
+                self.last_layer_id = None  # Resetta l'ID del layer
+                return None, True  # Aggiungo flag True per multi-comune
             
             file_name = result[0][0]
             self.codice_comune = result[0][1]  # Salva il codice comune come attributo della classe
@@ -247,7 +255,7 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             feedback.pushInfo(f"Comune trovato: {nome} (Codice: {self.codice_comune})")
             feedback.pushInfo(f"File associato: {file_name}")
             
-            return file_name
+            return file_name, False  # Aggiungo flag False
         finally:
             con.close()
 
