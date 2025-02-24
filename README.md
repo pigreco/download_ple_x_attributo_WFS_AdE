@@ -61,6 +61,9 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 
 Il tool restituisce dati dal WFS (aggiornato) ma si appoggia ai dati statici presenti nelle cartelle zippate (aggiornate 2 volte all'anno) vedi le [API](./reference/query_engine.md). Quindi, è probabile, che l'output del tool restituisca una particella diversa da quella cercata.
 
+### Video presentazione
+
+
 ### DISCLAIMER
 
-L'autore del tool non è un developer di professione, ha realizzato il codice appoggiandosi a Claude AI e Copilot.
+L'autore del tool non è un developer di professione, ha realizzato il codice appoggiandosi a [Claude AI](https://claude.ai/new) e [Copilot GitHub](https://github.com/features/copilot).
