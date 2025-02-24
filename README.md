@@ -41,10 +41,10 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 
 - L'algoritmo funziona solo da Processing di QGIS;
 - Vai su Strumenti di Processing
-- `Aggiungi Script agli Strumenti...` dopo aver cliccato sull'Icona di Python:
+- `Aggiungi Script agli Strumenti...` dopo aver cliccato sull'Icona di Python ![](https://docs.qgis.org/3.34/en/_images/mIconPythonFile.png):
 
 ![](./imgs/strumenti_processing.png)
-- Troverai l'algoritmo nel Gruppo Script | Catasto_WFS
+- Troverai l'algoritmo nel Gruppo Script | Catasto_WFS | Particelle Catastali su WFS AdE
 
 ## Come contribuire
 
@@ -57,7 +57,10 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 - [RNDT Scheda metadati](https://geodati.gov.it/geoportale/visualizzazione-metadati/scheda-metadati/?uuid=age:S_0000_ITALIA)
 - [Cartografia catastale WFS](https://www.agenziaentrate.gov.it/portale/cartografia-catastale-wfs)
 
+### Note
+
+Il tool restituisce dati dal WFS (aggiornato) ma si appoggia ai dati statici presenti nelle cartelle zippate (aggiornate 2 volte all'anno) per il calcolo delle coordinate (vedi le [API](./reference/query_engine.md)). Quindi, è probabile, che l'output del tool restituisca una particella diversa da quella cercata.
+
 ### DISCLAIMER
 
-1. Il tool restituisce dati dal WFS (aggiornato) ma si appoggia ai dati statici presenti nelle cartelle zippate (2 volte all'anno) per il calcolo delle coordinate.
-2. L'autore del tool non è un developer di professione, ha realizzato il codice appoggiandosi a Claude AI e Copilot.
+L'autore del tool non è un developer di professione, ha realizzato il codice appoggiandosi a Claude AI e Copilot.
