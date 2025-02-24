@@ -46,6 +46,11 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 ![](./imgs/strumenti_processing.png)
 - Troverai l'algoritmo nel Gruppo Script | Catasto_WFS | Particelle Catastali su WFS AdE
 
+**NB:** Il tool ha bisogno della libreria DuckDB per funzionare, quindi occorre che sia installato nel tuo sistema, altrimenti non riuscirai ad installarlo.
+
+1. Se usi OSGeo4W Network Installer, cerca la libreria di DuckDB e installala;
+2. se usi l'installatore StanAlone (*.msi), devi installare il plugin QDuckDB
+
 ## Come contribuire
 
  1. Fai un fork del repository
