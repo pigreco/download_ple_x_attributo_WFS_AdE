@@ -27,7 +27,7 @@ Questo tool è progettato per essere integrato in QGIS e consente di scaricare l
 - **_SEZIONE_**: sezione censuaria
 - _**FOGLIO**_: numero del foglio
 - _**PARTICELLA**_: numero della particella
-- _**AREA**_: superficie in metro quadro (m²)
+- _**AREA**_: superficie in metri quadrati (m²)
 
 Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 
@@ -35,7 +35,7 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 
 ### Le API che permettono la ricerca
 
-- [Query engine](./reference/query_engine.md) a cura dell'associazione [onData](https://www.ondata.it/)
+- [Query engine](./reference/query_engine.md) a cura dell'associazione [onData](https://ondata.substack.com/)
 
 ### Come installare l'algoritmo nel Processing di QGIS
 
@@ -45,6 +45,12 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 
 ![](./imgs/strumenti_processing.png)
 - Troverai l'algoritmo nel Gruppo Script | Catasto_WFS
+
+## Come contribuire
+
+ 1. Fai un fork del repository
+ 2. Crea un branch per le tue modifiche
+ 3. Invia una pull request
 
 ### Riferimenti
 
