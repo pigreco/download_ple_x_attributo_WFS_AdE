@@ -4,7 +4,7 @@ Questo tool è progettato per essere integrato in QGIS e consente di scaricare l
 
 ![](./imgs/gui.png)
 
-### Ricerca e download di particelle (_per attributo_) usando il WFS dell Agenzia delle Entrate.
+### Ricerca e download di particelle DEMO
 
 ![](./imgs/demo.gif)
 
@@ -59,4 +59,5 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 
 ### DISCLAIMER
 
-L'autore del tool non è un developer di professione, ha realizzato il codice appoggiandosi a Claude AI e Copilot.
+1. Il tool restituisce dati dal WFS (aggiornato) ma si appoggia ai dati statici presenti nelle cartelle zippate (2 volte all'anno) per il calcolo delle coordinate.
+2. L'autore del tool non è un developer di professione, ha realizzato il codice appoggiandosi a Claude AI e Copilot.
