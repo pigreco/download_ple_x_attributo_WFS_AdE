@@ -1,8 +1,10 @@
-# download_ple_x_attributo_WFS_AdE
+# Tool per QGIS: Estrazione di Particelle Catastali tramite Ricerca per Attributo e WFS
+
+Questo tool è progettato per essere integrato in QGIS e consente di scaricare le particelle catastali tramite una _**ricerca per attributo**_, sfruttando il servizio WFS (Web Feature Service) fornito dal Catasto AdE.
 
 ![](./imgs/gui.png)
 
-## Ricerca e download di particelle (_per attributo_) usando il WFS dell Agenzia delle Entrate.
+### Ricerca e download di particelle (_per attributo_) usando il WFS dell Agenzia delle Entrate.
 
 ![](./imgs/demo.gif)
 
@@ -31,11 +33,11 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
 
 ![](./imgs/tabella.png)
 
-## Le API che permettono la ricerca
+### Le API che permettono la ricerca
 
 - [Query engine](./reference/query_engine.md) a cura dell'associazione [onData](https://ondata.substack.com/)
 
-## Come installare l'algoritmo nel Processing di QGIS
+### Come installare l'algoritmo nel Processing di QGIS
 
 - L'algoritmo funziona solo da Processing di QGIS;
 - Vai su Strumenti di Processing
@@ -50,7 +52,11 @@ Il risultato sarà un layer vettoriale con i poligoni delle particelle trovate.
  2. Crea un branch per le tue modifiche
  3. Invia una pull request
 
-## Riferimenti
+### Riferimenti
 
 - [RNDT Scheda metadati](https://geodati.gov.it/geoportale/visualizzazione-metadati/scheda-metadati/?uuid=age:S_0000_ITALIA)
 - [Cartografia catastale WFS](https://www.agenziaentrate.gov.it/portale/cartografia-catastale-wfs)
+
+### DISCLAIMER
+
+L'autore del tool non è un developer di professione, ha realizzato il codice appoggiandosi a Claude AI e Copilot.
