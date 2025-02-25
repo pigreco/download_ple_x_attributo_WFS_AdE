@@ -2,13 +2,13 @@
 
 ## Versione 1.1.0-RC2 (25 febbraio 2025)
 ### Miglioramenti
-- Implementato il supporto completo per comuni con sezioni multiple
+- Implementato il supporto alla gestione dei comuni con sezione [#5](https://github.com/pigreco/download_ple_x_attributo_WFS_AdE/issues/5)
 - Aggiunto download automatico di tutte le particelle trovate per sezione
 - Migliorata la gestione delle transazioni per GeoPackage
 - Ottimizzato il feedback all'utente con informazioni sulle sezioni
 
 ### Bug risolti
-- Corretto il problema di gestione delle coordinate multiple dovuto alle sezioni
+- Corretto il problema di gestione dei comuni con sezione
 - Risolto il conflitto nelle transazioni GeoPackage
 
 ## Versione 1.0.0 (24 febbraio 2025)
