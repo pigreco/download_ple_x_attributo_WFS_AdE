@@ -56,6 +56,7 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             - Supporta l'aggiunta a layer esistenti o la creazione di nuovi layer
             - Calcola l'area in metri quadri
             - Esegue lo zoom automatico sull'ultima particella trovata
+            - Gestisce i comuni con Sezione Censuaria e scarica tutte le particelle trovate.
         
         <b>PARAMETRI RICHIESTI:</b>
             - Codice o Nome Comune: puoi inserire il codice catastale (es: M011) o il nome del comune (es: VILLAROSA)
@@ -186,38 +187,48 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
 
         # Recupera le coordinate
         try:
-            coordinates = self.get_coordinates(comune, foglio, particella, file_name, feedback)
-            if not coordinates:
+            coordinates_list = self.get_coordinates(comune, foglio, particella, file_name, feedback)
+            if not coordinates_list:
                 return {self.OUTPUT: dest_id}
+                
+            last_geometry = None
+            success = False
+            
+            # Elabora tutte le coordinate trovate
+            for coordinates in coordinates_list:
+                try:
+                    current_success, current_geometry = self.get_particella_wfs(coordinates[0], coordinates[1], sink, input_layer, feedback)
+                    if current_success and current_geometry:
+                        success = True
+                        last_geometry = current_geometry
+                except Exception as e:
+                    feedback.pushWarning(f"Errore nell'elaborazione delle coordinate {coordinates}: {str(e)}")
+                    continue
+            
+            # Salva l'ultima geometria per lo zoom finale
+            if last_geometry:
+                self.last_geometry = last_geometry
+                self.last_layer_id = dest_id
+                feedback.pushInfo("Zoom programmato sull'ultima particella")
+
+            # Gestione del completamento
+            if input_layer:
+                if is_gpkg:
+                    input_layer.dataProvider().leaveUpdateMode()
+                else:
+                    if success:
+                        input_layer.commitChanges()
+                    else:
+                        input_layer.rollBack()
+                    
         except Exception as e:
             feedback.reportError(f"Errore nel recupero delle coordinate: {str(e)}")
-            return {self.OUTPUT: dest_id}
-
-        # Recupera i dati WFS
-        try:
-            success, last_geometry = self.get_particella_wfs(coordinates[0], coordinates[1], sink, input_layer, feedback)
-            if not success:
-                feedback.reportError(self.tr('Errore nel recupero dei dati WFS'))
-            else:
-                if input_layer:
-                    if is_gpkg:
-                        input_layer.dataProvider().leaveUpdateMode()
-                    else:
-                        input_layer.commitChanges()
-            
-                # Salva l'ultima geometria e l'ID del layer per il post-processing
-                if last_geometry:
-                    self.last_geometry = last_geometry
-                    self.last_layer_id = dest_id
-                    feedback.pushInfo("Zoom programmato sull'ultima particella")
-                
-        except Exception as e:
-            feedback.reportError(f"Errore nel recupero dei dati WFS: {str(e)}")
             if input_layer:
                 if is_gpkg:
                     input_layer.dataProvider().leaveUpdateMode()
                 else:
                     input_layer.rollBack()
+            return {self.OUTPUT: dest_id}
 
         return {self.OUTPUT: dest_id}
 
@@ -273,14 +284,20 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             AND foglio LIKE ? 
             AND particella LIKE ?
             """
-            # Usa il codice comune salvato invece del parametro comune
             result = con.execute(query, [url, self.codice_comune, foglio, particella]).fetchall()
             
             if result and len(result) > 0:
-                x = float(result[0][0]) / 1000000
-                y = float(result[0][1]) / 1000000
-                feedback.pushInfo(f"Coordinate trovate: X={x}, Y={y}")
-                return x, y
+                coordinates_list = []
+                for idx, r in enumerate(result):
+                    x = float(r[0]) / 1000000
+                    y = float(r[1]) / 1000000
+                    feedback.pushInfo(f"Particella {idx + 1}: X={x}, Y={y}")
+                    coordinates_list.append((x, y))
+                
+                if len(coordinates_list) > 1:
+                    feedback.pushInfo(f"\nSaranno scaricate tutte le {len(coordinates_list)} particelle trovate")
+                
+                return coordinates_list  # Restituisce tutte le coordinate
             else:
                 feedback.reportError("Nessun risultato trovato per i parametri specificati")
                 return None
