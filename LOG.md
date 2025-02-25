@@ -15,7 +15,6 @@
 
 ### Funzionalità principali
 - Ricerca particelle catastali tramite WFS dell'Agenzia delle Entrate
-- Supporto per comuni con sezioni censuarie multiple
 - Download automatico di tutte le particelle trovate
 - Calcolo area in metri quadri
 - Zoom automatico sull'ultima particella trovata
