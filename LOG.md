@@ -11,7 +11,7 @@
 - Corretto il problema di gestione dei comuni con sezione
 - Risolto il conflitto nelle transazioni GeoPackage
 
-## Versione 1.0.0 (24 febbraio 2025)
+## Versione 1.0.0-RC (24 febbraio 2025)
 
 ### Funzionalità principali
 - Ricerca particelle catastali tramite WFS dell'Agenzia delle Entrate
