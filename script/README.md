@@ -10,10 +10,11 @@ Script Python che implementa una _funzione personalizzata_ per il field calc di 
 
 #### Funzionalità principali
 
-- Funzione `get_particella_wkt()` che restituisce la geometria WKT di una particella specificando:
+- Funzione `get_particel_wkt()` che restituisce la geometria WKT di una particella specificando:
   - Codice comune (es: M011) o nome comune (es: VILLAROSA)
   - Numero foglio
   - Numero particella
+  - Sezione (opzionale)
 
 #### Utilizzo
 
@@ -21,8 +22,9 @@ Script Python che implementa una _funzione personalizzata_ per il field calc di 
 2. Chiamare la funzione dal calcolatore di campi:
 
 ```python
-get_particella_wkt('M011', '1', '2')  # usando codice comune
-get_particella_wkt('VILLAROSA', '1', '2')  # usando nome comune
+get_particel_wkt('M011', '1', '2')  # usando codice comune
+get_particel_wkt('VILLAROSA', '1', '2')  # usando nome comune
+get_particel_wkt('M325', '22', '51','B')  # usando codice comune e sezione
 ```
 
 La funzione restituirà la geometria della particella in formato WKT (Well-Known Text).
