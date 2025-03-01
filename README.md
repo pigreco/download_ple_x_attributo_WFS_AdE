@@ -1,6 +1,6 @@
 # Tool per QGIS: Estrazione di Particelle Catastali tramite Ricerca per Attributo e WFS
 
-Questo tool è progettato per essere integrato in QGIS e consente di scaricare le particelle catastali tramite una _**ricerca per attributo**_, sfruttando il servizio WFS (Web Feature Service) fornito dal Catasto AdE.
+Questo tool è progettato per essere integrato in QGIS e consente di scaricare le particelle catastali tramite una _**ricerca per attributo**_, sfruttando il servizio WFS (Web Feature Service) fornito dal Catasto AdE e il [servizio di _query_](https://github.com/ondata/dati_catastali) realizzato da onData.
 
 ![](./imgs/gui.png)
 
