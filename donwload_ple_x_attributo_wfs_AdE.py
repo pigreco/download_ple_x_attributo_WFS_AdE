@@ -17,9 +17,10 @@ from qgis.core import (QgsProcessing, QgsFeatureSink, QgsProcessingException,
                       QgsFeature, QgsGeometry, QgsWkbTypes, QgsPointXY,
                       QgsProject, QgsVectorLayer, QgsFeatureRequest,
                       QgsExpression, QgsExpressionContext, QgsCoordinateReferenceSystem,
-                      QgsProcessingLayerPostProcessorInterface, QgsCoordinateTransform)
+                      QgsProcessingLayerPostProcessorInterface, QgsCoordinateTransform, QgsProcessingParameterFile)
 from qgis.utils import iface
 import duckdb
+import csv
 from datetime import datetime
 
 class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
@@ -63,7 +64,38 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             - Se il nome del comune è presente per più particelle, scrivere il codice catastale
             - Numero foglio (es: 2) fa in automatico il padding a 4 cifre
             - Numero particella (es: 2)
+            
+        ---   
+        <b style="color: green">UTILIZZO FILE CSV:</b>
+        È possibile effettuare ricerche multiple caricando un file CSV.
+        <b style="color: green">Formato del file CSV:</b>
+        <b style="color: red">⚠️ ATTENZIONE !!!</b>
+        Il file CSV <span style="color: red">deve</span> contenere una riga di intestazione con <span style="color: red">esattamente</span> queste colonne:
+
+        <pre>
+        COMUNE,FOGLIO,PARTICELLA
+        </pre>
+
+        <b style="color: green">Esempio:</b>
+        <pre>
+        COMUNE,FOGLIO,PARTICELLA
+        M011,0001,1
+        M290,0005,69
+        M011,0001,12
+        M011,0001,13
+        M011,0001,14
+        M011,0001,15
+        </pre>
+
+        in cui:
+        - "COMUNE": Codice catastale o nome del comune.
+        - "FOGLIO": Numero del foglio (con padding automatico a 4 cifre).
+        - "PARTICELLA": Numero della particella.
+
+        Ogni riga del file CSV rappresenta una singola particella catastale da ricercare.
         
+        <a href='https://github.com/JungleKiosk'>by JK</a>
+        ---
         <b>ATTRIBUTI DEL LAYER:</b>
             - NATIONALCADASTRALREFERENCE: codice identificativo completo
             - ADMIN: codice Comune
@@ -91,7 +123,8 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterString(
                 self.INPUT_COMUNE,
                 self.tr('Codice Comune o nome Comune'),
-                defaultValue='M011'
+                defaultValue='M011',
+                optional=True
             )
         )
         
@@ -99,7 +132,8 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterString(
                 self.INPUT_FOGLIO,
                 self.tr('Numero Foglio'),
-                defaultValue='0001'
+                defaultValue='0001',
+                optional=True
             )
         )
         
@@ -107,7 +141,18 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterString(
                 self.INPUT_PARTICELLA,
                 self.tr('Numero Particella'),
-                defaultValue='1'
+                defaultValue='1',
+                optional=True
+            )
+        )
+        
+         # NUOVO PARAMETRO: Inserimento multiplo da CSV (opzionale)
+        self.addParameter(
+            QgsProcessingParameterFile(
+                'INPUT_CSV',
+                self.tr('File CSV con lista particelle'),
+                extension='csv',
+                optional=True
             )
         )
 
@@ -123,114 +168,97 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
         )
 
     def processAlgorithm(self, parameters, context, feedback):
-        # All'inizio del metodo, inizializza le variabili
-        self.last_geometry = None
-        self.last_layer_id = None
-
-        # Input parameters
-        comune = self.parameterAsString(parameters, self.INPUT_COMUNE, context).strip().upper()
-        foglio = self.parameterAsString(parameters, self.INPUT_FOGLIO, context).strip().zfill(4)
-        particella = self.parameterAsString(parameters, self.INPUT_PARTICELLA, context).strip()
+        input_csv = self.parameterAsString(parameters, 'INPUT_CSV', context).strip()
         input_layer = self.parameterAsVectorLayer(parameters, self.INPUT_LAYER, context)
 
-        # Recupera il file parquet
-        try:
-            result = self.get_parquet_file(comune, feedback)
-            if not result[0]:  # file_name è None
-                if result[1]:  # è multi-comune
-                    return {}  # Non crea il layer temporaneo
-                return {self.OUTPUT: None}  # Comune non trovato
-            file_name = result[0]
-        except Exception as e:
-            feedback.reportError(f"Errore nel recupero del file parquet: {str(e)}")
-            return {self.OUTPUT: None}
+        fields = QgsFields()
+        fields.append(QgsField('NATIONALCADASTRALREFERENCE', QVariant.String))
+        fields.append(QgsField('ADMIN', QVariant.String))
+        fields.append(QgsField('SEZIONE', QVariant.String))
+        fields.append(QgsField('FOGLIO', QVariant.String))
+        fields.append(QgsField('PARTICELLA', QVariant.String))
+        fields.append(QgsField('AREA', QVariant.Double))
 
-        if input_layer:
-            feedback.pushInfo(f'Aggiungendo dati al layer esistente: {input_layer.name()}')
-            
-            # Verifica se il layer è un geopackage
-            is_gpkg = input_layer.source().lower().endswith('.gpkg')
-            
-            if is_gpkg:
-                # Per Geopackage, usa una transazione esplicita
-                input_layer.dataProvider().enterUpdateMode()
-            
-            sink = input_layer.dataProvider()
-            dest_id = input_layer.id()
-            
-            # Non chiamare startEditing per geopackage
-            if not is_gpkg:
-                input_layer.startEditing()
+        (sink, dest_id) = self.parameterAsSink(
+            parameters,
+            self.OUTPUT,
+            context,
+            fields,
+            QgsWkbTypes.MultiPolygon,
+            QgsCoordinateReferenceSystem('EPSG:6706')
+        )
+
+        if sink is None:
+            raise QgsProcessingException('Errore creazione layer output')
+
+        # Controlla se è stato fornito il CSV
+        if input_csv:
+            feedback.pushInfo(f"Elaborazione CSV: {input_csv}")
+
+            with open(input_csv, newline='', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                for idx, row in enumerate(reader):
+                    comune = row['COMUNE'].strip().upper()
+                    foglio = row['FOGLIO'].strip().zfill(4)
+                    particella = row['PARTICELLA'].strip()
+
+                    feedback.pushInfo(f"[{idx+1}] {comune}-{foglio}-{particella}")
+
+                    try:
+                        result = self.get_parquet_file(comune, feedback)
+                        if not result[0]:
+                            feedback.reportError(f"Comune '{comune}' non trovato")
+                            continue
+                        file_name = result[0]
+
+                        coordinates_list = self.get_coordinates(comune, foglio, particella, file_name, feedback)
+                        if not coordinates_list:
+                            feedback.reportError(f"Particella '{particella}' non trovata")
+                            continue
+
+                        for coordinates in coordinates_list:
+                            success, _ = self.get_particella_wfs(coordinates[0], coordinates[1], sink, None, feedback)
+                            if not success:
+                                feedback.pushWarning(f"Errore scaricando {comune}-{foglio}-{particella}")
+
+                    except Exception as e:
+                        feedback.reportError(f"Errore CSV riga {idx+1}: {e}")
+                        continue
+
         else:
-            # Create new layer with fields
-            feedback.pushInfo('Creando nuovo layer')
-            fields = QgsFields()
-            fields.append(QgsField('NATIONALCADASTRALREFERENCE', QVariant.String))
-            fields.append(QgsField('ADMIN', QVariant.String))
-            fields.append(QgsField('SEZIONE', QVariant.String))
-            fields.append(QgsField('FOGLIO', QVariant.String))
-            fields.append(QgsField('PARTICELLA', QVariant.String))
-            fields.append(QgsField('AREA', QVariant.Double))
-            
-            # Create output sink for new layer
-            (sink, dest_id) = self.parameterAsSink(
-                parameters,
-                self.OUTPUT,
-                context,
-                fields,
-                QgsWkbTypes.MultiPolygon,
-                QgsCoordinateReferenceSystem('EPSG:6706')
-            )
+            # Caso input singolo, controlla che sia stato inserito almeno il comune
+            comune = self.parameterAsString(parameters, self.INPUT_COMUNE, context).strip().upper()
+            foglio = self.parameterAsString(parameters, self.INPUT_FOGLIO, context).strip().zfill(4)
+            particella = self.parameterAsString(parameters, self.INPUT_PARTICELLA, context).strip()
 
-            if sink is None:
-                raise QgsProcessingException(self.tr('Errore nella creazione del layer di output'))
+            if not comune:
+                raise QgsProcessingException("Inserisci un Codice Comune o carica un file CSV!")
 
-        # Recupera le coordinate
-        try:
-            coordinates_list = self.get_coordinates(comune, foglio, particella, file_name, feedback)
-            if not coordinates_list:
-                return {self.OUTPUT: dest_id}
-                
-            last_geometry = None
-            success = False
-            
-            # Elabora tutte le coordinate trovate
-            for coordinates in coordinates_list:
-                try:
-                    current_success, current_geometry = self.get_particella_wfs(coordinates[0], coordinates[1], sink, input_layer, feedback)
-                    if current_success and current_geometry:
-                        success = True
-                        last_geometry = current_geometry
-                except Exception as e:
-                    feedback.pushWarning(f"Errore nell'elaborazione delle coordinate {coordinates}: {str(e)}")
-                    continue
-            
-            # Salva l'ultima geometria per lo zoom finale
-            if last_geometry:
-                self.last_geometry = last_geometry
-                self.last_layer_id = dest_id
-                feedback.pushInfo("Zoom programmato sull'ultima particella")
+            feedback.pushInfo(f"Elaborazione singolo input: {comune}-{foglio}-{particella}")
 
-            # Gestione del completamento
-            if input_layer:
-                if is_gpkg:
-                    input_layer.dataProvider().leaveUpdateMode()
-                else:
-                    if success:
-                        input_layer.commitChanges()
-                    else:
-                        input_layer.rollBack()
-                    
-        except Exception as e:
-            feedback.reportError(f"Errore nel recupero delle coordinate: {str(e)}")
-            if input_layer:
-                if is_gpkg:
-                    input_layer.dataProvider().leaveUpdateMode()
-                else:
-                    input_layer.rollBack()
-            return {self.OUTPUT: dest_id}
+            try:
+                result = self.get_parquet_file(comune, feedback)
+                if not result[0]:
+                    feedback.reportError(f"Comune '{comune}' non trovato")
+                    return {self.OUTPUT: dest_id}
+
+                file_name = result[0]
+
+                coordinates_list = self.get_coordinates(comune, foglio, particella, file_name, feedback)
+                if not coordinates_list:
+                    feedback.reportError(f"Particella '{particella}' non trovata")
+                    return {self.OUTPUT: dest_id}
+
+                for coordinates in coordinates_list:
+                    success, _ = self.get_particella_wfs(coordinates[0], coordinates[1], sink, input_layer, feedback)
+                    if not success:
+                        feedback.pushWarning(f"Errore scaricando {comune}-{foglio}-{particella}")
+
+            except Exception as e:
+                feedback.reportError(f"Errore elaborazione singolo input: {e}")
 
         return {self.OUTPUT: dest_id}
+
 
     def get_parquet_file(self, comune, feedback):
         """Esegue la prima query per ottenere il nome del file parquet e info sul comune"""
