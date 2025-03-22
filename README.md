@@ -25,10 +25,10 @@ Questo tool è progettato per essere integrato in QGIS e consente di scaricare l
   - Lista particelle: "1,2,3,45"
   - Intervallo particelle: "1-7" (scarica tutte dalla 1 alla 7)
   - Combinazioni: "1,3,5-8,10,15-20"
- <b>NOTA</b>:
-  - Se viene richiesta la modalità "scarica tutte le particelle", e il numero di particelle del foglio è molto elevato,
+
+<b>NOTA</b>:
+    Se viene richiesta la modalità "scarica tutte le particelle", e il numero di particelle del foglio è molto elevato,
     viene mostrato un avviso per segnalare l'operazione potenzialmente lenta.
-"""
 
 **ATTRIBUTI DEL LAYER:**
 - **_NATIONALCADASTRALREFERENCE_**: codice identificativo completo
