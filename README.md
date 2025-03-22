@@ -19,8 +19,7 @@ Questo tool è progettato per essere integrato in QGIS e consente di scaricare l
 - Se cercate più volte la stessa particella non la inserisce
 - Se il nome del comune è presente per più particelle chiede di scrivere il codice catastale
 - Numero foglio (es: 2) fa il padding a 4 cifre
-- Numero particella
-  <b>FORMATO PARTICELLE</b>:
+- Numero particella:
   - Particella singola: "1"
   - Lista particelle: "1,2,3,45"
   - Intervallo particelle: "1-7" (scarica tutte dalla 1 alla 7)
