@@ -176,12 +176,12 @@ Maggiori informazioni sul servizio WFS: <a href='https://www.agenziaentrate.gov.
             # Create new layer with fields
             feedback.pushInfo('Creando nuovo layer')
             fields = QgsFields()
-            fields.append(QgsField('NATIONALCADASTRALREFERENCE', QVariant.String))
-            fields.append(QgsField('ADMIN', QVariant.String))
-            fields.append(QgsField('SEZIONE', QVariant.String))
-            fields.append(QgsField('FOGLIO', QVariant.String))
-            fields.append(QgsField('PARTICELLA', QVariant.String))
-            fields.append(QgsField('AREA', QVariant.Double))
+            fields.append(QgsField('NATIONALCADASTRALREFERENCE', QVariant.String, 'string'))
+            fields.append(QgsField('ADMIN', QVariant.String, 'string'))
+            fields.append(QgsField('SEZIONE', QVariant.String, 'string'))
+            fields.append(QgsField('FOGLIO', QVariant.String, 'string'))
+            fields.append(QgsField('PARTICELLA', QVariant.String, 'string'))
+            fields.append(QgsField('AREA', QVariant.Double, 'double'))
             
             # Create output sink for new layer
             (sink, dest_id) = self.parameterAsSink(
