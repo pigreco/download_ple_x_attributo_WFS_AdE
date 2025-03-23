@@ -1,5 +1,13 @@
 # Registro delle modifiche
 
+## Versione 1.1.1-RC3 (23 marzo 2025)
+### Miglioramenti
+- Aggiunta la possibilità di insrire liste, intervalli e combinazioni di particelle (grazie a UBS-IT)
+- Migliorata la compatibilità con future versioni di QGIS
+
+### Bug risolti
+- Corretto il warning di deprecazione nel metodo processAlgorithm
+
 ## Versione 1.1.0-RC2 (25 febbraio 2025)
 ### Miglioramenti
 - Implementato il supporto alla gestione dei comuni con sezione [#5](https://github.com/pigreco/download_ple_x_attributo_WFS_AdE/issues/5)
