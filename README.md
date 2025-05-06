@@ -76,9 +76,13 @@ Il tool ha bisogno della libreria **DuckDB** per funzionare, quindi occorre che 
 
 Il tool restituisce dati dal **WFS** (_aggiornato_) ma si appoggia ai dati statici presenti nelle cartelle zippate (aggiornate 2 volte l'anno) vedi le [API](./reference/query_engine.md). Quindi, è probabile, che l'output del tool restituisca una particella diversa da quella cercata, ma dovrebbe essere un evento raro.
 
+### Fork
+
+Fork con aggiunta della ricerca anche per sezione: https://github.com/DonatoTaucci/download_ple_x_attributo_WFS_AdE
+
 ### Video presentazione
 
-[Video](https://youtu.be/qd4Tj4LKGgc)
+[Video](https://youtu.be/qd4Tj4LKGgc).
 
 ### DISCLAIMER
 
