@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 /***************************************************************************
- WFS Catasto Agenzia delle Entrate CC BY 4.0
+ WFS Catasto Agenzia delle Entrate CC BY 4.1.1
                               -------------------
         copyright            : (C) 2025 by Totò Fiandaca
         email                : pigrecoinfinito@gmail.com
@@ -31,7 +31,8 @@ class DatiCatastaliAlgorithm(QgsProcessingAlgorithm):
     INPUT_COMUNE = 'INPUT_COMUNE'
     INPUT_FOGLIO = 'INPUT_FOGLIO'
     INPUT_PARTICELLA = 'INPUT_PARTICELLA'
-    INPUT_ALL_PARTICELLE = 'INPUT_ALL_PARTICELLE'  # COMMENT: Nuovo parametro per consentire il download di tutte le particelle del foglio
+    INPUT_SEZIONE = 'INPUT_SEZIONE'  # Nuovo parametro per la sezione
+    INPUT_ALL_PARTICELLE = 'INPUT_ALL_PARTICELLE'
     OUTPUT = 'OUTPUT'
     
     def tr(self, string):
@@ -110,6 +111,17 @@ Maggiori informazioni sul servizio WFS: <a href='https://www.agenziaentrate.gov.
                 defaultValue='0001'
             )
         )
+        
+        # Aggiungiamo il parametro per la sezione
+        self.addParameter(
+            QgsProcessingParameterString(
+                self.INPUT_SEZIONE,
+                self.tr('Sezione (opzionale)'),
+                defaultValue='',
+                optional=True
+            )
+        )
+        
         self.addParameter(
             QgsProcessingParameterString(
                 self.INPUT_PARTICELLA,
@@ -145,6 +157,7 @@ Maggiori informazioni sul servizio WFS: <a href='https://www.agenziaentrate.gov.
         # Input parameters
         comune = self.parameterAsString(parameters, self.INPUT_COMUNE, context).strip().upper()
         foglio = self.parameterAsString(parameters, self.INPUT_FOGLIO, context).strip().zfill(4)
+        sezione = self.parameterAsString(parameters, self.INPUT_SEZIONE, context).strip().upper()
         particella_input = self.parameterAsString(parameters, self.INPUT_PARTICELLA, context).strip()
         all_particelle = self.parameterAsBool(parameters, self.INPUT_ALL_PARTICELLE, context)
             
@@ -152,6 +165,8 @@ Maggiori informazioni sul servizio WFS: <a href='https://www.agenziaentrate.gov.
         feedback.pushInfo("=== AVVIO PROCESSO DI RICERCA PARTICELLE ===")
         feedback.pushInfo(f"Comune: {comune}")
         feedback.pushInfo(f"Foglio: {foglio}")
+        if sezione:
+            feedback.pushInfo(f"Sezione: {sezione}")
         if all_particelle:
             feedback.pushInfo("Modalità: TUTTE LE PARTICELLE DEL FOGLIO")
         else:
@@ -210,12 +225,14 @@ Maggiori informazioni sul servizio WFS: <a href='https://www.agenziaentrate.gov.
             feedback.reportError(f"Errore nel recupero del file parquet: {str(e)}")
             return {self.OUTPUT: dest_id}
 
+        # Nella parte del processAlgorithm dove vengono chiamati i metodi
+        
         # Preparazione della lista di particelle
         particelle_da_cercare = []
         
         if all_particelle:
             feedback.pushInfo("Recupero di tutte le particelle del foglio...")
-            particelle_da_cercare = self.get_all_particelle(self.codice_comune, foglio, file_name, feedback)
+            particelle_da_cercare = self.get_all_particelle(self.codice_comune, foglio, file_name, feedback, sezione)
             if not particelle_da_cercare:
                 feedback.reportError(f"Nessuna particella trovata nel foglio {foglio}")
                 return {self.OUTPUT: dest_id}
@@ -224,9 +241,6 @@ Maggiori informazioni sul servizio WFS: <a href='https://www.agenziaentrate.gov.
         else:
             # metodo per analizzare input multipli (lista o intervallo)
             particelle_da_cercare = self.parse_particelle_input(particella_input, feedback)
-            if not particelle_da_cercare:
-                feedback.reportError("Formato particelle non valido")
-                return {self.OUTPUT: dest_id}
 
         total_particelle = len(particelle_da_cercare)
         particelle_non_trovate = []
@@ -244,7 +258,8 @@ Maggiori informazioni sul servizio WFS: <a href='https://www.agenziaentrate.gov.
             feedback.setProgress(progress)
             
             feedback.pushInfo(f"--- Ricerca particella {particella} ({i+1}/{total_particelle}) ---")
-            coordinates_list = self.get_coordinates(self.codice_comune, foglio, particella, file_name, feedback)
+            # Qui dobbiamo passare anche il parametro sezione
+            coordinates_list = self.get_coordinates(self.codice_comune, foglio, particella, file_name, feedback, sezione)
             if not coordinates_list:
                 feedback.pushInfo(f"Particella {particella} non trovata nel database")
                 particelle_non_trovate.append(particella)
@@ -318,21 +333,40 @@ Maggiori informazioni sul servizio WFS: <a href='https://www.agenziaentrate.gov.
             particelle = [particella_input]
         return particelle
 
-    def get_all_particelle(self, codice_comune, foglio, file_name, feedback):
-        """COMMENT: Recupera tutte le particelle di un foglio tramite DuckDB. Questa funzione non era presente nella prima versione."""
+    def get_all_particelle(self, codice_comune, foglio, file_name, feedback, sezione=None):
+        """Recupera tutte le particelle di un foglio tramite DuckDB."""
         feedback.pushInfo(f"Ricerca di tutte le particelle nel foglio {foglio}...")
+        if sezione:
+            feedback.pushInfo(f"Filtro per Sezione: {sezione}")
+        
         try:
             con = duckdb.connect()
             try:
                 url = f'https://raw.githubusercontent.com/ondata/dati_catastali/main/S_0000_ITALIA/anagrafica/{file_name}'
-                query = """
-                    SELECT DISTINCT particella 
-                    FROM read_parquet(?) 
-                    WHERE comune = ? 
-                      AND foglio LIKE ?
-                    ORDER BY particella
-                """
-                result = con.execute(query, [url, codice_comune, foglio]).fetchall()
+                
+                if sezione and sezione.strip():
+                    # Query con filtro per sezione
+                    query = """
+                        SELECT DISTINCT particella, INSPIREID_LOCALID
+                        FROM read_parquet(?) 
+                        WHERE comune = ? 
+                          AND foglio LIKE ?
+                          AND SUBSTR(INSPIREID_LOCALID, 16, 1) = ?
+                        ORDER BY particella
+                    """
+                    result = con.execute(query, [url, codice_comune, foglio, sezione]).fetchall()
+                    feedback.pushInfo(f"Ricerca particelle con filtro sezione: {sezione}")
+                else:
+                    # Query originale senza filtro per sezione
+                    query = """
+                        SELECT DISTINCT particella 
+                        FROM read_parquet(?) 
+                        WHERE comune = ? 
+                          AND foglio LIKE ?
+                        ORDER BY particella
+                    """
+                    result = con.execute(query, [url, codice_comune, foglio]).fetchall()
+                
                 if result and len(result) > 0:
                     particelle = [r[0] for r in result]
                     feedback.pushInfo(f"Trovate {len(particelle)} particelle nel foglio {foglio}")
@@ -380,28 +414,48 @@ Maggiori informazioni sul servizio WFS: <a href='https://www.agenziaentrate.gov.
         except Exception as e:
             feedback.reportError(f"Errore durante la ricerca del comune: {str(e)}")
             return None, False
-    # Recupera le coordinate
-    def get_coordinates(self, comune, foglio, particella, file_name, feedback):
+    def get_coordinates(self, comune, foglio, particella, file_name, feedback, sezione=None):
         """Recupera le coordinate per la particella specificata."""
         feedback.pushInfo(f"Ricerca coordinate per Particella {particella}, Foglio {foglio}")
+        if sezione:
+            feedback.pushInfo(f"Filtro per Sezione: {sezione}")
+        
         try:
             con = duckdb.connect()
             try:
                 url = f'https://raw.githubusercontent.com/ondata/dati_catastali/main/S_0000_ITALIA/anagrafica/{file_name}'
-                query = """
-                    SELECT x, y 
-                    FROM read_parquet(?) 
-                    WHERE comune = ? 
-                      AND foglio LIKE ? 
-                      AND particella LIKE ?
-                """
-                result = con.execute(query, [url, self.codice_comune, foglio, particella]).fetchall()
+                
+                if sezione and sezione.strip():
+                    # Query con filtro per sezione
+                    query = """
+                        SELECT x, y, INSPIREID_LOCALID
+                        FROM read_parquet(?) 
+                        WHERE comune = ? 
+                          AND foglio LIKE ? 
+                          AND particella LIKE ?
+                          AND SUBSTR(INSPIREID_LOCALID, 16, 1) = ?
+                    """
+                    result = con.execute(query, [url, comune, foglio, particella, sezione]).fetchall()
+                    feedback.pushInfo(f"Ricerca con filtro sezione: {sezione}")
+                else:
+                    # Query originale senza filtro per sezione
+                    query = """
+                        SELECT x, y, INSPIREID_LOCALID
+                        FROM read_parquet(?) 
+                        WHERE comune = ? 
+                          AND foglio LIKE ? 
+                          AND particella LIKE ?
+                    """
+                    result = con.execute(query, [url, comune, foglio, particella]).fetchall()
+                
                 if result and len(result) > 0:
                     coordinates_list = []
                     for r in result:
                         x = float(r[0]) / 1000000
                         y = float(r[1]) / 1000000
-                        feedback.pushInfo(f"Coordinate trovate: X={x}, Y={y}")
+                        inspireid = r[2]
+                        sezione_trovata = inspireid[15:16] if len(inspireid) > 16 else ""
+                        feedback.pushInfo(f"Coordinate trovate: X={x}, Y={y}, Sezione={sezione_trovata}")
                         coordinates_list.append((x, y))
                     if len(coordinates_list) > 1:
                         feedback.pushInfo(f"Trovate {len(coordinates_list)} istanze della particella {particella}")
